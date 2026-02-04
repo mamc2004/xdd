@@ -4,7 +4,9 @@ import { Send, Upload, Trash2, FileText, Loader2, Database, X, ChevronRight, Bra
 import { callGeminiStream } from './services/geminiService';
 import { Message } from './types';
 import ResponseBlock from './components/ResponseBlock';
-import { KnowledgeFile, getAllFilesFromDB, saveFileToDB, deleteFileFromDB, addDeletedDefault, getDeletedDefaults, clearDeletedDefaults } from './services/dbService';
+import { getAllFilesFromDB, saveFileToDB, deleteFileFromDB, addDeletedDefault, getDeletedDefaults, clearDeletedDefaults } from './services/dbService';
+import { getAllFilesFromFirestore, saveFileToFirestore, deleteFileFromFirestore } from './services/remoteDbService';
+import type { KnowledgeFile } from './services/remoteDbService';
 
 const KNOWLEDGE_BASE_1 = {
   "id": "KB1",
@@ -55,11 +57,11 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadKnowledge = async () => {
       try {
-        const [files, deleted] = await Promise.all([
-          getAllFilesFromDB(),
+        const [filesFromFirestore, deleted] = await Promise.all([
+          getAllFilesFromFirestore(),
           getDeletedDefaults()
         ]);
-        setKnowledgeFiles(files);
+        setKnowledgeFiles(filesFromFirestore);
         setDeletedDefaults(deleted);
       } catch (e) {
         console.error("Lỗi khởi tạo dữ liệu:", e);
@@ -159,8 +161,8 @@ const App: React.FC = () => {
       const category = classifyFile(file.name);
       if (category) {
         const fullFile: KnowledgeFile = { ...fileData, category, addedAt: Date.now() };
-        await saveFileToDB(fullFile);
-        autoAdded.push(fullFile);
+        const fileId = await saveFileToFirestore(fullFile);
+        autoAdded.push({ ...fullFile, id: fileId });
       } else {
         newPending.push(fileData);
       }
@@ -193,11 +195,16 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteFile = async (name: string) => {
+  const handleDeleteFile = async (fileId: string | undefined) => {
+    if (!fileId) return;
     if (!confirm('Xác nhận xóa tệp tri thức này khỏi hệ thống?')) return;
-    await deleteFileFromDB(name);
-    setKnowledgeFiles(prev => prev.filter(f => f.name !== name));
-    showToast("Đã xóa tệp tri thức", "success");
+    try {
+      await deleteFileFromFirestore(fileId);
+      setKnowledgeFiles(prev => prev.filter(f => f.id !== fileId));
+      showToast("Đã xóa tệp tri thức", "success");
+    } catch (e) {
+      showToast("Lỗi khi xóa tệp", "error");
+    }
   };
 
   const handleDeleteDefault = async (name: string) => {
