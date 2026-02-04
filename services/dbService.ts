@@ -99,3 +99,79 @@ export const clearDeletedDefaults = async (): Promise<void> => {
     transaction.oncomplete = () => resolve();
   });
 };
+
+// Seed dữ liệu mặc định vào IndexedDB
+export const seedDefaultKnowledge = async (): Promise<void> => {
+  const existingFiles = await getAllFilesFromDB();
+  
+  // Nếu đã có dữ liệu, không seed lại
+  if (existingFiles.length > 0) {
+    return;
+  }
+
+  const defaultFiles: KnowledgeFile[] = [
+    // KB1 - Tổ chức - Xây dựng Đảng
+    {
+      name: "Kết luận 228-KL/TW (31/12/2025) - Bộ máy & Chính quyền 2 cấp.txt",
+      mimeType: "text/plain",
+      data: btoa("KẾT LUẬN 228-KL/TW\nNgày: 31/12/2025\n\nNội dung: Quy định về bộ máy và chính quyền 2 cấp\n\nCác điểm chính:\n- Cơ cấu tổ chức\n- Chức năng, nhiệm vụ\n- Quy trình làm việc"),
+      category: 'KB1',
+      addedAt: Date.now() - 86400000 * 7
+    },
+    {
+      name: "Báo cáo 613-BC/BTCTW (29/12/2025) - Hoạt động hệ thống chính trị.txt",
+      mimeType: "text/plain",
+      data: btoa("BÁO CÁO 613-BC/BTCTW\nNgày: 29/12/2025\n\nNội dung: Báo cáo hoạt động của hệ thống chính trị\n\nCác điểm chính:\n- Kết quả hoạt động\n- Những vấn đề tồn tại\n- Phương hướng cải thiện"),
+      category: 'KB1',
+      addedAt: Date.now() - 86400000 * 6
+    },
+    {
+      name: "Quyết định 368-QĐ/TW (08/9/2025) - Chức danh lãnh đạo.txt",
+      mimeType: "text/plain",
+      data: btoa("QUYẾT ĐỊNH 368-QĐ/TW\nNgày: 08/9/2025\n\nNội dung: Về chức danh lãnh đạo\n\nCác điểm chính:\n- Danh sách chức danh\n- Tiêu chuẩn, điều kiện\n- Quy trình bổ nhiệm"),
+      category: 'KB1',
+      addedAt: Date.now() - 86400000 * 5
+    },
+    {
+      name: "Kết luận 195-KL/TW (26/9/2025) - Chính quyền 2 cấp.txt",
+      mimeType: "text/plain",
+      data: btoa("KẾT LUẬN 195-KL/TW\nNgày: 26/9/2025\n\nNội dung: Về chính quyền 2 cấp\n\nCác điểm chính:\n- Cơ cấu tổ chức\n- Quy trình hoạt động\n- Trách nhiệm của từng cấp"),
+      category: 'KB1',
+      addedAt: Date.now() - 86400000 * 4
+    },
+
+    // KB2 - Tuyên giáo - Dân vận
+    {
+      name: "Chỉ thị 50-CT/TW (23/7/2025) - Sinh hoạt chi bộ.txt",
+      mimeType: "text/plain",
+      data: btoa("CHỈ THỊ 50-CT/TW\nNgày: 23/7/2025\n\nNội dung: Về sinh hoạt chi bộ\n\nCác điểm chính:\n- Hình thức sinh hoạt\n- Nội dung thảo luận\n- Tần suất họp\n- Quy trình ghi biên bản"),
+      category: 'KB2',
+      addedAt: Date.now() - 86400000 * 3
+    },
+    {
+      name: "Chỉ thị 51-CT/TW (08/8/2025) - Thẻ Đảng viên.txt",
+      mimeType: "text/plain",
+      data: btoa("CHỈ THỊ 51-CT/TW\nNgày: 08/8/2025\n\nNội dung: Về thẻ Đảng viên\n\nCác điểm chính:\n- Mẫu thẻ Đảng viên\n- Cách cấp thẻ\n- Quản lý thẻ\n- Quy trình cấp lại"),
+      category: 'KB2',
+      addedAt: Date.now() - 86400000 * 2
+    },
+    {
+      name: "Hướng dẫn 31-HD/VPTW - Danh mục hồ sơ nghiệp vụ.txt",
+      mimeType: "text/plain",
+      data: btoa("HƯỚNG DẪN 31-HD/VPTW\n\nNội dung: Danh mục hồ sơ nghiệp vụ\n\nCác điểm chính:\n- Danh mục hồ sơ\n- Yêu cầu về trình bày\n- Bảo quản hồ sơ\n- Quy trình lưu trữ"),
+      category: 'KB2',
+      addedAt: Date.now() - 86400000 * 1
+    }
+  ];
+
+  // Lưu tất cả file mặc định vào DB
+  for (const file of defaultFiles) {
+    try {
+      await saveFileToDB(file);
+    } catch (e) {
+      console.error(`Lỗi seed file ${file.name}:`, e);
+    }
+  }
+
+  console.log("✅ Đã seed dữ liệu mặc định vào IndexedDB");
+};

@@ -71,20 +71,30 @@ const ResponseBlock: React.FC<ResponseBlockProps> = ({ content, thinking, onFoll
     if (playing) return;
     setPlaying(true);
     
-    let audioData = prefetchedAudio;
-    if (!audioData) {
-      audioData = await generateTTS(textToSpeak);
-    }
+    try {
+      let audioData = prefetchedAudio;
+      if (!audioData) {
+        audioData = await generateTTS(textToSpeak);
+      }
 
-    if (audioData) {
+      if (!audioData) {
+        alert('Không thể tạo âm thanh. Vui lòng kiểm tra API Key.');
+        setPlaying(false);
+        return;
+      }
+
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-      const buffer = await decodeAudioData(decodeBase64(audioData), ctx, 24000, 1);
+      const decodedBytes = decodeBase64(audioData);
+      const buffer = await decodeAudioData(decodedBytes, ctx, 24000, 1);
+      
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       source.connect(ctx.destination);
       source.onended = () => setPlaying(false);
       source.start();
-    } else {
+    } catch (error) {
+      console.error("Lỗi phát âm thanh:", error);
+      alert('Lỗi: ' + (error instanceof Error ? error.message : 'Không thể phát âm thanh'));
       setPlaying(false);
     }
   };

@@ -24,8 +24,10 @@ export const callGeminiStream = async (
   isPro: boolean = false,
   onChunk: (text: string, thinking?: string) => void
 ) => {
-  // Always use process.env.API_KEY directly as per guidelines
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  // Read API key from Vite env first (client builds) then fallback to process.env
+  const apiKey = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY) || process.env.API_KEY;
+  if (!apiKey) throw new Error('API key not set. Please set VITE_GEMINI_API_KEY in your .env or environment.');
+  const ai = new GoogleGenAI({ apiKey: apiKey as string });
   
   const contents = history.map(h => ({
     role: h.role,
@@ -94,21 +96,31 @@ export const callGeminiStream = async (
 };
 
 export const generateTTS = async (text: string): Promise<string | undefined> => {
-  // Always use process.env.API_KEY directly as per guidelines
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  const ttsApiKey = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY) || process.env.API_KEY;
+  if (!ttsApiKey) throw new Error('API key not set for TTS. Please set VITE_GEMINI_API_KEY in your .env or environment.');
+  const ai = new GoogleGenAI({ apiKey: ttsApiKey as string });
   try {
+    // Strip markdown and limit text length for TTS
+    const cleanText = text
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/`(.*?)`/g, '$1')
+      .slice(0, 1000);
+
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text: `Đọc văn bản sau: ${text}` }] }],
+      model: "gemini-2.0-flash-preview",
+      contents: [{ 
+        parts: [{ text: cleanText }] 
+      }],
       config: {
-        // Fix: Changed responseModalalities to responseModalities
         responseModalities: [Modality.AUDIO],
         speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Phoebe' } },
         },
       },
     });
-    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    const audioData = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData)?.inlineData?.data;
+    return audioData;
   } catch (error) {
     console.error("TTS generation error:", error);
     return undefined;

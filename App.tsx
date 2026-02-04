@@ -1,10 +1,11 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Upload, Trash2, FileText, Loader2, Database, X, ChevronRight, BrainCircuit, Sparkles, ShieldCheck, Book, RotateCcw, AlertTriangle } from 'lucide-react';
+import mammoth from 'mammoth';
 import { callGeminiStream } from './services/geminiService';
 import { Message } from './types';
 import ResponseBlock from './components/ResponseBlock';
-import { KnowledgeFile, getAllFilesFromDB, saveFileToDB, deleteFileFromDB, addDeletedDefault, getDeletedDefaults, clearDeletedDefaults } from './services/dbService';
+import { KnowledgeFile, getAllFilesFromDB, saveFileToDB, deleteFileFromDB, addDeletedDefault, getDeletedDefaults, clearDeletedDefaults, seedDefaultKnowledge } from './services/dbService';
 
 const KNOWLEDGE_BASE_1 = {
   "id": "KB1",
@@ -55,6 +56,9 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadKnowledge = async () => {
       try {
+        // Seed dữ liệu mặc định nếu chưa có
+        await seedDefaultKnowledge();
+        
         const [files, deleted] = await Promise.all([
           getAllFilesFromDB(),
           getDeletedDefaults()
@@ -108,6 +112,7 @@ const App: React.FC = () => {
     if (!files || files.length === 0) return;
 
     // Supported MIME types by Gemini API
+    // include .docx so we can convert it client-side to text
     const SUPPORTED_MIME_TYPES = [
       'application/pdf',
       'text/plain',
@@ -116,6 +121,7 @@ const App: React.FC = () => {
       'text/xml',
       'text/markdown',
       'application/json',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'image/jpeg',
       'image/png',
       'image/gif',
@@ -144,17 +150,39 @@ const App: React.FC = () => {
       }
       
       validCount++;
-      const base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (event) => resolve((event.target?.result as string).split(',')[1]);
-        reader.readAsDataURL(file);
-      });
+      let fileData: any;
 
-      const fileData = {
-        name: file.name,
-        mimeType: mimeType,
-        data: base64
-      };
+      // If docx, convert to plain text using mammoth in-browser
+      if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.toLowerCase().endsWith('.docx')) {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const result = await mammoth.extractRawText({ arrayBuffer });
+          const text = result?.value || '';
+          // encode UTF-8 safely to base64
+          const base64 = btoa(unescape(encodeURIComponent(text)));
+          fileData = {
+            name: file.name.replace(/\.docx$/i, '.txt'),
+            mimeType: 'text/plain',
+            data: base64
+          };
+          showToast(`Đã chuyển ${file.name} → văn bản`, 'info');
+        } catch (e) {
+          showToast(`Không thể chuyển ${file.name}`, 'error');
+          continue;
+        }
+      } else {
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (event) => resolve((event.target?.result as string).split(',')[1]);
+          reader.readAsDataURL(file);
+        });
+
+        fileData = {
+          name: file.name,
+          mimeType: mimeType,
+          data: base64
+        };
+      }
 
       const category = classifyFile(file.name);
       if (category) {
@@ -254,7 +282,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#FFF9F0] relative overflow-hidden text-slate-800">
+    <div className="flex flex-col h-screen bg-[#FFF9F0] relative overflow-hidden text-slate-800 text-sm md:text-base">
       {toast && (
         <div className={`fixed bottom-40 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-3 px-8 py-4 rounded-full shadow-2xl border-2 animate-fadeIn transition-all ${
           toast.type === 'success' ? 'bg-green-600 border-green-300 text-white' : 
@@ -411,11 +439,22 @@ const App: React.FC = () => {
         </div>
         
         {isAdmin && (
-          <div className="p-8 border-t-4 border-[#FFD700] bg-white">
-            <input type="file" ref={knowledgeInputRef} onChange={handleFileUpload} className="hidden" multiple />
-            <button onClick={() => knowledgeInputRef.current?.click()} className="w-full bg-[#B30000] text-white py-5 rounded-[32px] font-black uppercase flex items-center justify-center gap-4 hover:bg-red-800 shadow-xl transition-all">
-              <Upload className="w-5 h-5" /> NẠP TRI THỨC MỚI
-            </button>
+          <div className="p-6 border-t-4 border-[#FFD700] bg-white">
+            <input
+              type="file"
+              ref={knowledgeInputRef}
+              onChange={handleFileUpload}
+              className="hidden"
+              multiple
+              accept={
+                "application/pdf,text/plain,text/html,text/csv,text/xml,text/markdown,application/json,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,image/gif,image/webp,image/x-icon,audio/mpeg,audio/wav,audio/webm,video/mp4,video/mpeg,video/webm,.pdf,.txt,.html,.csv,.xml,.md,.json,.jpg,.jpeg,.png,.gif,.webp,.ico,.mp3,.wav,.webm,.mp4,.mpeg,.docx"
+              }
+            />
+            <div className="flex justify-center">
+              <button onClick={() => knowledgeInputRef.current?.click()} className="max-w-xs w-full bg-[#B30000] text-white py-3 rounded-2xl font-black uppercase text-sm flex items-center justify-center gap-3 hover:bg-red-800 shadow transition-all">
+                <Upload className="w-4 h-4" /> NẠP TRI THỨC MỚI
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -429,14 +468,14 @@ const App: React.FC = () => {
               <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[#B30000] text-[#FFD700] px-14 py-3.5 rounded-full text-[12px] font-black uppercase border-4 border-white z-10 italic">HÀNH ĐỘNG - KỶ CƯƠNG - SÁNG TẠO</div>
               <div className="flex flex-col lg:flex-row gap-20 items-center">
                 <div className="flex-1 text-center lg:text-left space-y-10">
-                  <div className="inline-flex p-8 bg-red-50 rounded-[50px] border-4 border-[#FFD700]/30 shadow-inner"><Sparkles className="w-24 h-24 text-[#B30000]" /></div>
-                  <h2 className="text-5xl md:text-8xl font-black text-slate-900 uppercase tracking-tighter leading-[0.9]">Trợ lý <br/> <span className="text-[#B30000]">Nghiệp vụ Đảng</span></h2>
+                  <div className="inline-flex p-8 bg-red-50 rounded-[50px] border-4 border-[#FFD700]/30 shadow-inner"><Sparkles className="w-5 h-5 text-[#B30000]" /></div>
+                  <h2 className="text-3xl md:text-5xl font-black text-slate-900 uppercase tracking-tighter leading-[0.9]">Trợ lý AI<br/> <span className="text-[#B30000]">Nghiệp vụ Đảng</span></h2>
                   <p className="text-slate-500 text-sm md:text-lg font-bold uppercase border-l-4 border-[#FFD700] pl-6 italic">Hệ thống tham mưu số xã Niêm Sơn 2026. Hỗ trợ cập nhật và loại bỏ văn bản lỗi thời tức thì.</p>
                 </div>
-                <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {["Hướng dẫn bầu cử Chi bộ 2025?", "Tiêu chuẩn xếp loại Đảng viên?", "Quy trình kết nạp Đảng viên?", "Nội dung sinh hoạt Chi bộ mới?"].map((q, i) => (
+                <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {["Hướng dẫn bầu cử bí thư, phó bí thư Chi bộ?", "Quy trình kết nạp Đảng viên?", "Nội dung sinh hoạt Chi bộ?", "Quy trình quy hoạch Ủy viên Ủy ban kiểm tra Đảng ủy"].map((q, i) => (
                     <button key={i} onClick={() => handleSend(q)} className="p-10 bg-[#FFF9F0] hover:bg-white rounded-[50px] border-2 border-[#FFD700]/20 hover:border-[#B30000] transition-all text-left font-black uppercase text-xs tracking-tight group">
-                      <ChevronRight className="w-6 h-6 mb-4 text-[#B30000] group-hover:rotate-90 transition-transform" /> {q}
+                      <ChevronRight className="w-3 h-3 mb-4 text-[#B30000] group-hover:rotate-90 transition-transform" /> {q}
                     </button>
                   ))}
                 </div>
@@ -462,7 +501,7 @@ const App: React.FC = () => {
               <div className="flex justify-start animate-pulse w-full">
                 <div className="bg-white p-10 rounded-[60px] shadow-2xl border-2 border-red-50 flex items-center gap-10">
                   <Loader2 className="w-14 h-14 animate-spin text-[#B30000]" />
-                  <span className="text-[#B30000] font-black text-base uppercase tracking-tight italic">AI ĐANG TRUY XUẤT TRI THỨC NGHIỆP VỤ...</span>
+                  <span className="text-[#B30000] font-black text-base uppercase tracking-tight italic">Trợ lý AI đang truy xuất nội dung nghiệp vụ...</span>
                 </div>
               </div>
             )}
@@ -471,17 +510,17 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <footer className="bg-white p-8 md:px-16 shadow-inner z-40 w-full border-t-4 border-[#FFD700]">
-        <div className="w-full max-w-[1700px] mx-auto relative group shadow-2xl rounded-[50px] border-4 border-slate-100 focus-within:border-[#B30000] transition-all">
+      <footer className="bg-white p-3 md:px-6 shadow-inner z-40 w-full border-t-4 border-[#FFD700]">
+        <div className="w-full max-w-[1700px] mx-auto relative group shadow-xl rounded-3xl border-4 border-slate-100 focus-within:border-[#B30000] transition-all">
           <textarea 
             value={input} 
             onChange={(e) => setInput(e.target.value)} 
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} 
             placeholder="Nhập yêu cầu nghiệp vụ Đảng tại đây..." 
-            className="w-full p-10 pr-32 rounded-[50px] focus:outline-none resize-none h-28 md:h-36 font-black text-lg md:text-2xl scrollbar-hide bg-white" 
+            className="w-full p-3 pr-20 rounded-3xl focus:outline-none resize-none h-16 md:h-20 font-black text-sm md:text-base scrollbar-hide bg-white" 
           />
-          <button onClick={() => handleSend()} disabled={loading || !input.trim()} className="absolute right-6 bottom-6 p-7 bg-[#B30000] text-[#FFD700] rounded-[32px] hover:bg-red-800 disabled:bg-slate-200 shadow-xl active:scale-90 transition-all border-b-8 border-red-950">
-            <Send className="w-8 h-8" />
+          <button onClick={() => handleSend()} disabled={loading || !input.trim()} className="absolute right-4 bottom-3 p-2 bg-[#B30000] text-[#FFD700] rounded-2xl hover:bg-red-800 disabled:bg-slate-200 shadow-lg active:scale-90 transition-all border-b-4 border-red-950">
+            <Send className="w-5 h-5" />
           </button>
         </div>
       </footer>
