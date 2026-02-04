@@ -4,9 +4,7 @@ import { Send, Upload, Trash2, FileText, Loader2, Database, X, ChevronRight, Bra
 import { callGeminiStream } from './services/geminiService';
 import { Message } from './types';
 import ResponseBlock from './components/ResponseBlock';
-import { getAllFilesFromDB, saveFileToDB, deleteFileFromDB, addDeletedDefault, getDeletedDefaults, clearDeletedDefaults } from './services/dbService';
-import { getAllFilesFromFirestore, saveFileToFirestore, deleteFileFromFirestore } from './services/remoteDbService';
-import type { KnowledgeFile } from './services/remoteDbService';
+import { KnowledgeFile, getAllFilesFromDB, saveFileToDB, deleteFileFromDB, addDeletedDefault, getDeletedDefaults, clearDeletedDefaults } from './services/dbService';
 
 const KNOWLEDGE_BASE_1 = {
   "id": "KB1",
@@ -57,11 +55,11 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadKnowledge = async () => {
       try {
-        const [filesFromFirestore, deleted] = await Promise.all([
-          getAllFilesFromFirestore(),
+        const [files, deleted] = await Promise.all([
+          getAllFilesFromDB(),
           getDeletedDefaults()
         ]);
-        setKnowledgeFiles(filesFromFirestore);
+        setKnowledgeFiles(files);
         setDeletedDefaults(deleted);
       } catch (e) {
         console.error("Lỗi khởi tạo dữ liệu:", e);
@@ -161,8 +159,8 @@ const App: React.FC = () => {
       const category = classifyFile(file.name);
       if (category) {
         const fullFile: KnowledgeFile = { ...fileData, category, addedAt: Date.now() };
-        const fileId = await saveFileToFirestore(fullFile);
-        autoAdded.push({ ...fullFile, id: fileId });
+        await saveFileToDB(fullFile);
+        autoAdded.push(fullFile);
       } else {
         newPending.push(fileData);
       }
@@ -189,28 +187,17 @@ const App: React.FC = () => {
     if (pendingFiles.length > 0) {
       const currentFile = pendingFiles[0];
       const fullFile: KnowledgeFile = { ...currentFile, category, addedAt: Date.now() };
-      try {
-        const fileId = await saveFileToFirestore(fullFile);
-        setKnowledgeFiles(prev => [...prev, { ...fullFile, id: fileId }]);
-      } catch (e) {
-        // Fallback to local DB if Firestore fails
-        await saveFileToDB(fullFile);
-        setKnowledgeFiles(prev => [...prev, fullFile]);
-      }
+      await saveFileToDB(fullFile);
+      setKnowledgeFiles(prev => [...prev, fullFile]);
       setPendingFiles(prev => prev.slice(1));
     }
   };
 
-  const handleDeleteFile = async (fileId: string | undefined) => {
-    if (!fileId) return;
+  const handleDeleteFile = async (name: string) => {
     if (!confirm('Xác nhận xóa tệp tri thức này khỏi hệ thống?')) return;
-    try {
-      await deleteFileFromFirestore(fileId);
-      setKnowledgeFiles(prev => prev.filter(f => f.id !== fileId));
-      showToast("Đã xóa tệp tri thức", "success");
-    } catch (e) {
-      showToast("Lỗi khi xóa tệp", "error");
-    }
+    await deleteFileFromDB(name);
+    setKnowledgeFiles(prev => prev.filter(f => f.name !== name));
+    showToast("Đã xóa tệp tri thức", "success");
   };
 
   const handleDeleteDefault = async (name: string) => {
@@ -388,7 +375,7 @@ const App: React.FC = () => {
                        <span className="text-[8px] text-slate-400 font-bold uppercase">{new Date(file.addedAt).toLocaleDateString()}</span>
                     </div>
                     {isAdmin && (
-                      <button onClick={() => handleDeleteFile((file as any).id)} className="text-red-300 hover:text-red-600 p-2.5 transition-all bg-red-50 rounded-xl">
+                      <button onClick={() => handleDeleteFile(file.name)} className="text-red-300 hover:text-red-600 p-2.5 transition-all bg-red-50 rounded-xl">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     )}
