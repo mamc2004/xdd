@@ -24,9 +24,9 @@ export const callGeminiStream = async (
   isPro: boolean = false,
   onChunk: (text: string, thinking?: string) => void
 ) => {
-  // Read API key from Vite env first (client builds) then fallback to process.env
-  const apiKey = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY) || process.env.API_KEY;
-  if (!apiKey) throw new Error('API key not set. Please set VITE_GEMINI_API_KEY in your .env or environment.');
+  // Read API key from environment variables
+  const apiKey = (import.meta.env as any).VITE_GEMINI_API_KEY || (process.env as any).API_KEY;
+  if (!apiKey) throw new Error('API key not set. Please set VITE_GEMINI_API_KEY in your .env or Netlify environment variables.');
   const ai = new GoogleGenAI({ apiKey: apiKey as string });
   
   const contents = history.map(h => ({
@@ -96,8 +96,8 @@ export const callGeminiStream = async (
 };
 
 export const generateTTS = async (text: string): Promise<string | undefined> => {
-  const ttsApiKey = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GEMINI_API_KEY) || process.env.API_KEY;
-  if (!ttsApiKey) throw new Error('API key not set for TTS. Please set VITE_GEMINI_API_KEY in your .env or environment.');
+  const ttsApiKey = (import.meta.env as any).VITE_GEMINI_API_KEY || (process.env as any).API_KEY;
+  if (!ttsApiKey) throw new Error('API key not set for TTS. Please set VITE_GEMINI_API_KEY in your .env or Netlify environment variables.');
   const ai = new GoogleGenAI({ apiKey: ttsApiKey as string });
   try {
     // Strip markdown and limit text length for TTS
