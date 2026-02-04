@@ -189,8 +189,14 @@ const App: React.FC = () => {
     if (pendingFiles.length > 0) {
       const currentFile = pendingFiles[0];
       const fullFile: KnowledgeFile = { ...currentFile, category, addedAt: Date.now() };
-      await saveFileToDB(fullFile);
-      setKnowledgeFiles(prev => [...prev, fullFile]);
+      try {
+        const fileId = await saveFileToFirestore(fullFile);
+        setKnowledgeFiles(prev => [...prev, { ...fullFile, id: fileId }]);
+      } catch (e) {
+        // Fallback to local DB if Firestore fails
+        await saveFileToDB(fullFile);
+        setKnowledgeFiles(prev => [...prev, fullFile]);
+      }
       setPendingFiles(prev => prev.slice(1));
     }
   };
@@ -382,7 +388,7 @@ const App: React.FC = () => {
                        <span className="text-[8px] text-slate-400 font-bold uppercase">{new Date(file.addedAt).toLocaleDateString()}</span>
                     </div>
                     {isAdmin && (
-                      <button onClick={() => handleDeleteFile(file.name)} className="text-red-300 hover:text-red-600 p-2.5 transition-all bg-red-50 rounded-xl">
+                      <button onClick={() => handleDeleteFile((file as any).id)} className="text-red-300 hover:text-red-600 p-2.5 transition-all bg-red-50 rounded-xl">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     )}
